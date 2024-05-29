@@ -61,7 +61,7 @@
 		<repository>
 		  <id>github</id>
 		  <name>Demo</name>
-		  <url>https://maven.pkg.github.com/fuping-ma-igt/demo</url>
+		  <url>https://maven.pkg.github.com/fuping-ma-igt</url>
 		</repository>
 	 </distributionManagement>
 </project>
