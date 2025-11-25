@@ -26,51 +26,32 @@ jobs:
       
       - name: Delete existing package version (if exists)
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          PACKAGE_NAME="com.actions.common"
-          OWNER="fuping-ma-igt"
-          REPO="actions-common"
-          
           echo "Checking for existing version: $VERSION"
-          echo "Package: $PACKAGE_NAME"
           
-          # Try organization/repository endpoint first
-          VERSIONS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          # List all versions and delete the matching one
+          gh api \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/orgs/$OWNER/packages/maven/$PACKAGE_NAME/versions" 2>/dev/null)
-          
-          # If that fails, try user endpoint
-          if [ -z "$VERSIONS" ] || [ "$VERSIONS" = "null" ]; then
-            VERSIONS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/users/$OWNER/packages/maven/$PACKAGE_NAME/versions" 2>/dev/null)
-          fi
-          
-          # Find version ID
-          VERSION_ID=$(echo "$VERSIONS" | jq -r ".[] | select(.name==\"$VERSION\") | .id")
-          
-          if [ -n "$VERSION_ID" ] && [ "$VERSION_ID" != "null" ]; then
-            echo "Found version $VERSION (ID: $VERSION_ID)"
-            echo "Attempting to delete..."
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /users/fuping-ma-igt/packages/maven/com.actions.common/versions \
+            --jq ".[] | select(.name==\"$VERSION\") | .id" | while read -r version_id; do
             
-            # Try organization endpoint
-            curl -X DELETE -f \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/orgs/$OWNER/packages/maven/$PACKAGE_NAME/versions/$VERSION_ID" 2>/dev/null \
-              || \
-            # If that fails, try user endpoint
-            curl -X DELETE -f \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/users/$OWNER/packages/maven/$PACKAGE_NAME/versions/$VERSION_ID"
-            
-            echo "Deleted version $VERSION"
-            sleep 3
-          else
-            echo "Version $VERSION does not exist yet"
-          fi
+            if [ -n "$version_id" ]; then
+              echo "Found version $VERSION (ID: $version_id), deleting..."
+              gh api \
+                --method DELETE \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                /users/fuping-ma-igt/packages/maven/com.actions.common/versions/$version_id
+              echo "Deleted version $VERSION"
+              sleep 5
+            fi
+          done
+          
+          echo "Deletion step completed"
       
       - name: Build with Maven
         run: mvn clean package -DskipTests -s .github/settings.xml
